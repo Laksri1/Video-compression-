@@ -170,9 +170,9 @@ quantization_matrix_for_given_bitrate=[
 ]
 
 quantization_matrix_for_auto = [
-    [2, 6, 9, 8, 12, 20, 26, 31],
-    [6, 7, 9, 10, 13, 29, 30, 27],
-    [9, 7, 8, 12, 20, 29, 35, 28],
+    [1, 1, 6, 8, 12, 20, 26, 31],
+    [2, 10, 4, 10, 13, 29, 30, 27],
+    [18, 14, 16, 12, 20, 29, 35, 28],
     [7, 9, 11, 15, 26, 44, 41, 32],
     [9, 11, 19, 29, 35, 55, 52, 39],
     [12, 17, 26, 30, 38, 49, 56, 46],
@@ -221,36 +221,34 @@ def img_comp(image,im_size,marcoBlockSize,quantized_matrix,total_bits):
             colomn=int(key.split("_")[1])*8
             empty_image[row:row+8,colomn:colomn+8]=after_iDCT[key]
 
-        cv2.imshow("Image", empty_image)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-        
+        # cv2.imshow("Image", empty_image)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
+
         print("psnr value ",psnr(image, empty_image))
         return total_bits
     
         # saveToText("after",empty_image)
 
-        # print("dequantised_result",after_dequantize["0_0"])
-        # print("inverse_dct",after_iDCT["0_0"])
-        # # # Wait for a key press and then close the window
-
         
     else:
         print(f"Error: Unable to load the image from {image_path}")
+
+#High quality
+img_comp(image,im_size,8,high_quaity_quantized_matrix,0)
+
+#Medium quality
+img_comp(image,im_size,8,medium_quaity_quantized_matrix,0)
+
+#low quality
+img_comp(image,im_size,8,low_quaity_quantized_matrix,0)
 
 
 t=img_comp(image,im_size,8,quantization_matrix_for_given_bitrate,total_bits)
 print(t)
 
-# # Call the function
-# result_quantization_matrix, result_total_bits = adjust_quantization_matrix(
-#     337736, image, im_size, 8, quantization_matrix_for_auto, total_bits
-# )
 
-# print("Adjusted Quantization Matrix:")
-# print(result_quantization_matrix)
-# print("Total Bits after Adjustment:", result_total_bits)
-given_value = 300000
+given_value = 323000
 
 # Loop until the condition is satisfied
 while not (given_value - 1000 <= t <= given_value + 1000):
