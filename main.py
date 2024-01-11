@@ -5,36 +5,30 @@
 
 import cv2
 import numpy as np
+import math
+from scipy.fftpack import dct
 
 
 # DCT ========================================================
-
 def dct(block):
     return np.fft.fft2(block, norm="ortho")
 
 
-# Inverse DCT ================================================
+# Quantize ===================================================
+def quantize(block, quantization_matrix):
+    return np.round(block / quantization_matrix)
 
+
+# Dequantize =================================================
+def dequantize(block, quantization_matrix):
+    return block * quantization_matrix
+
+# Inverse DCT ================================================
 def idct(block):
     return np.fft.ifft2(block, norm="ortho")
 
 
-# Probability =================================================
-
-def probability(q_vals):
-  
-    unique_values, counts = np.unique(q_vals, return_counts=True)
-    
-    value_counts = dict(zip(unique_values, counts))
-
-    for key in value_counts:
-        value_counts[key]=value_counts[key]/(16*16)
-
-    return value_counts
-
-
-# Quantizer =================================================
-
+# Quantizer ===================================================
 def quantiser(array):
 
     # max=np.max(red_array)
@@ -67,57 +61,48 @@ def quantiser(array):
 
     return np.array(array)
 
+# Save file ===================================================
+def save_dict_to_txt(dictionary, file_path):
+    with open(file_path, 'w') as file:
+        for key, value in dictionary.items():
+            file.write(f"{key}: {value}\n")
 
-# Sort data ========================================================
+# Run Lenghth =================================================
+def run_length_coding(matrix):
 
-def sort(input_dict):
-    items = list(input_dict.items())
-    n = len(items)
+    rle_list = []
+    current_run = None
+    run_length = 0
 
-    for i in range(n - 1):
-        for j in range(0, n - i - 1):
-            if items[j][1] > items[j + 1][1]:
-                items[j], items[j + 1] = items[j + 1], items[j]
+    for row in matrix:
+        for element in row:
+            if current_run is None:
+                current_run = element
+                run_length = 1
+            elif current_run == element:
+                run_length += 1
+            else:
+                rle_list.append((current_run, run_length))
+                current_run = element
+                run_length = 1
 
-    sorted_img = dict(items)
-    
-    return sorted_img
-
-
-# Huffman ===========================================================
-
-def huffman(sorted_dict,input_dict):
-    for key in input_dict:
-        input_dict[key] = ""
-
-    while (len(sorted_dict)>1):
-        new_value = list(sorted_dict.values())[0] + list(sorted_dict.values())[1]
-        key = str(list(sorted_dict.keys())[0])+"_"+str(list(sorted_dict.keys())[1])
-
-        sorted_dict[key] = new_value
-
-        result = str(list(sorted_dict.keys())[0]).split('_')
-
-        for i in result:
-            input_dict[int(i)] = "0" + input_dict[int(i)]
-
-        sorted_dict.pop(list(sorted_dict.keys())[0])
-
-        result = str(list(sorted_dict.keys())[0]).split('_')
-
-        for i in result:
-            input_dict[int(i)] = "1"+input_dict[int(i)]
-
-        sorted_dict.pop(list(sorted_dict.keys())[0])
-
-        # Step 4: Sort the dictionary again using bubblesort
-        sorted_dict = sort(sorted_dict)
-
-    return input_dict
+    # Add the last run
+    rle_list.append((current_run, run_length))
+    print(rle_list)
+    return rle_list
 
 
+# Run Length Decode ===========================================
+def run_length_decode(rle_list):
+    decoded_matrix = []
 
-# Main =======================================================
+    for element, run_length in rle_list:
+        decoded_matrix.extend([element] * run_length)
+
+    return decoded_matrix
+
+
+# Main ========================================================
 original_img = cv2.imread("image.jpg")
 original_img_array = np.array(original_img)
 
@@ -133,17 +118,26 @@ cv2.waitKey(0)
 cv2.destroyAllWindows()
 
 # Define macro block size
-windowsize_r = 5 #use 60 for 8x8 matrix
-windowsize_c = 5
+windowsize_r = 60 #use 60 for 8x8 matrix
+windowsize_c = 60
 
 arr = np.split(gray_img_array, windowsize_r)
 arr = np.array([np.split(x, windowsize_c, 1) for x in arr])
 
 imageAfter_DCT =np.array(arr)
 imageAfter_Quantize =np.array(arr)
-img_probability =np.array(arr)
-sorted_img_prob =np.array(arr)
-huf_img =np.array(arr)
+imageAfter_Coding ={}
+
+quantized_matrix=[
+    [3, 5, 7, 9, 11, 13, 15, 17],
+    [5, 7, 9, 11, 13, 15, 17, 19],
+    [7, 9, 11, 13, 15, 17, 19, 21],
+    [9, 11, 13, 15, 17, 19, 21, 23],
+    [11, 13, 15, 17, 19, 21, 23, 25],
+    [13, 15, 17, 19, 21, 23, 25, 27],
+    [15, 17, 19, 21, 23, 25, 27, 29],
+    [17, 19, 21, 23, 25, 27, 29, 31]
+]
 
 for x in range(windowsize_r):
     for y in range(windowsize_c):
@@ -151,23 +145,13 @@ for x in range(windowsize_r):
 
 for x in range(windowsize_r):
     for y in range(windowsize_c):
-        imageAfter_Quantize[x][y] = quantiser(imageAfter_DCT[x][y])
+        imageAfter_Quantize[x][y] = quantize(imageAfter_DCT[x][y],quantized_matrix)
 
 for x in range(windowsize_r):
     for y in range(windowsize_c):
-        img_probability[x][y] = probability(imageAfter_Quantize[x][y])
+        imageAfter_Coding[str(x)+"_"+str(y)] = run_length_coding(imageAfter_Quantize[x][y])
 
-codeBook = img_probability.copy()
-
-for x in range(windowsize_r):
-    for y in range(windowsize_c):
-        sorted_img_prob[x][y] = sort(img_probability[x][y])
-
-for x in range(windowsize_r):
-    for y in range(windowsize_c):
-        huf_img[x][y] = huffman(sorted_img_prob[x][y], codeBook[x][y])
-
-
+save_dict_to_txt(imageAfter_Coding,"encode.txt")
 
 print(arr[0][0])
 print(dct(arr[0][0]))
