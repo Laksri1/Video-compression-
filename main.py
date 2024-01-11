@@ -1,75 +1,32 @@
-#
-# EE596 Mini Project 
-# E/18/023
-#
-
 import cv2
 import numpy as np
 import math
 from scipy.fftpack import dct
+from scipy.fftpack import idct
 
+# Specify the path to your image file
+image_path = "image.jpg"
 
-# DCT ========================================================
-def dct(block):
-    return np.fft.fft2(block, norm="ortho")
+# Read the image using OpenCV in grayscale
+image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+im_size=480
+start=0
+total_bits=0
 
+required_bit_rate=(300+34)*1000
 
-# Quantize ===================================================
-def quantize(block, quantization_matrix):
-    return np.round(block / quantization_matrix)
-
-
-# Dequantize =================================================
-def dequantize(block, quantization_matrix):
-    return block * quantization_matrix
-
-# Inverse DCT ================================================
-def idct(block):
-    return np.fft.ifft2(block, norm="ortho")
-
-
-# Quantizer ===================================================
-def quantiser(array):
-
-    # max=np.max(red_array)
-    # min=np.min(red_array)
-    max=255
-    min=0
-
-    # q = (max-min)/7
-
-    q=36.4285714
-
-    for i in range(array.shape[0]):
-        for j in range(array.shape[1]):
-            if array[i][j]>=min and array[i][j]<min+q/2 :
-                    array[i][j]= min
-            elif array[i][j]>=min+q/2 and array[i][j]<min+3*q/2 :
-                    array[i][j]= min + q
-            elif array[i][j]>=min+3*q/2 and array[i][j]<min+5*q/2 :
-                    array[i][j]= min + 2*q
-            elif array[i][j]>=min+5*q/2 and array[i][j]<min+7*q/2 :
-                    array[i][j]= min + 3*q
-            elif array[i][j]>=min+7*q/2 and array[i][j]<min+9*q/2 :
-                    array[i][j]= min + 4*q
-            elif array[i][j]>=min+9*q/2 and array[i][j]<min+11*q/2 :
-                    array[i][j]= min + 5*q
-            elif array[i][j]>=min+11*q/2 and array[i][j]<min+13*q/2 :
-                    array[i][j]= min + 6*q
-            elif array[i][j]>=min+13*q/2 and array[i][j]<min+15*q/2 :
-                    array[i][j]= min + 7*q
-
-    return np.array(array)
-
-# Save file ===================================================
+# Save file ============================================================
 def save_dict_to_txt(dictionary, file_path):
     with open(file_path, 'w') as file:
         for key, value in dictionary.items():
             file.write(f"{key}: {value}\n")
 
-# Run Lenghth =================================================
-def run_length_coding(matrix):
+def saveToText(name,img):
+    output_file_path = name+".txt"
+    np.savetxt(output_file_path, img, fmt='%d', delimiter=' ')
 
+# Run Length Coding =====================================================
+def run_length_coding(matrix):
     rle_list = []
     current_run = None
     run_length = 0
@@ -88,11 +45,9 @@ def run_length_coding(matrix):
 
     # Add the last run
     rle_list.append((current_run, run_length))
-    print(rle_list)
     return rle_list
 
-
-# Run Length Decode ===========================================
+# Run Length Decode =====================================================
 def run_length_decode(rle_list):
     decoded_matrix = []
 
@@ -101,66 +56,219 @@ def run_length_decode(rle_list):
 
     return decoded_matrix
 
+# Read File =============================================================
+def read_and_decode_text_file(file_path):
+    decode_dict = {}
 
-# Main ========================================================
-original_img = cv2.imread("image.jpg")
-original_img_array = np.array(original_img)
+    with open(file_path, 'r') as file:
+        for line in file:
+            # Split the line by ':' to get the key and value part
+            key, value_str = line.strip().split(':')
+            key = key.strip()
 
-cv2.imshow('origional IMAGE (E/18/023)',original_img_array)
-cv2.waitKey(0) 
-cv2.destroyAllWindows()
+            # Extract the values part and remove leading/trailing characters
+            value_str = value_str.strip()[1:-1]
 
-gray_img = cv2.cvtColor(original_img, cv2.COLOR_BGR2GRAY)
-gray_img_array = np.array(gray_img)
+            # Handle the case where there's no comma after the opening parenthesis
+            value_str = value_str.replace('),', ')|').replace('(', '').replace(')', '')
 
-cv2.imshow('origional IMAGE (E/18/023)',gray_img_array)
-cv2.waitKey(0) 
-cv2.destroyAllWindows()
+            # Split the string into pairs and convert to a list of tuples
+            rle_list = [tuple(map(int, pair.split(','))) for pair in value_str.split('|')]
 
-# Define macro block size
-windowsize_r = 60 #use 60 for 8x8 matrix
-windowsize_c = 60
+            # Decode the run-length code to get the 8x8 matrix
+            decoded_matrix = run_length_decode(rle_list)
 
-arr = np.split(gray_img_array, windowsize_r)
-arr = np.array([np.split(x, windowsize_c, 1) for x in arr])
+            # Reshape the 1D array to a 2D 8x8 matrix
+            decoded_matrix = [decoded_matrix[i:i + 8] for i in range(0, len(decoded_matrix), 8)]
 
-imageAfter_DCT =np.array(arr)
-imageAfter_Quantize =np.array(arr)
-imageAfter_Coding ={}
+            # Store the key and decoded matrix in the dictionary
+            decode_dict[key] = decoded_matrix
 
-quantized_matrix=[
-    [3, 5, 7, 9, 11, 13, 15, 17],
-    [5, 7, 9, 11, 13, 15, 17, 19],
-    [7, 9, 11, 13, 15, 17, 19, 21],
-    [9, 11, 13, 15, 17, 19, 21, 23],
-    [11, 13, 15, 17, 19, 21, 23, 25],
-    [13, 15, 17, 19, 21, 23, 25, 27],
-    [15, 17, 19, 21, 23, 25, 27, 29],
-    [17, 19, 21, 23, 25, 27, 29, 31]
+    return decode_dict
+
+# DCT ===================================================================
+def dct2(block):
+    return dct(dct(block, axis=0, norm='ortho'), axis=1, norm='ortho')
+
+# iDCT ==================================================================
+def iDCT2(block):
+    return idct(idct(block, axis=0, norm='ortho'), axis=1, norm='ortho')
+
+# PSNR ==================================================================
+def psnr(original, compressed):
+    mse = np.mean((original - compressed) ** 2)
+    if mse == 0:
+        return float('inf')
+    max_pixel = 255.0
+    psnr_value = 20 * np.log10(max_pixel / np.sqrt(mse))
+    return psnr_value
+
+# Counter ===============================================================
+def count_bits(run_length_code,total_bits):
+    
+    for run in run_length_code:
+        # Each run is represented by a tuple (value, length)
+        value, length = run
+        # Calculate the number of bits required to represent the value
+        value_bits = len(bin(value)[2:])
+        # Calculate the number of bits required to represent the length
+        length_bits = len(bin(length)[2:])
+        # Add the bits required for both value and length
+        total_bits += value_bits + length_bits
+    return total_bits
+
+# Main Fn================================================================
+mBlock={}
+after_dct={}
+after_quantize={}
+run_length_dict={}
+after_iDCT={}
+after_dequantize={}
+
+high_quaity_quantized_matrix=[
+    [3, 2, 2, 3, 5, 8, 10, 12],
+    [2, 2, 3, 4, 5, 12, 12, 11],
+    [3, 3, 3, 5, 8, 11, 14, 11],
+    [3, 3, 4, 6, 10, 17, 16, 12],
+    [4, 4, 7, 11, 14, 22, 21, 15],
+    [5, 7, 11, 13, 16, 12, 23, 18],
+    [10, 13, 16, 17, 21, 24, 24, 21],
+    [14, 18, 19, 20, 22, 20, 20, 20]
 ]
 
-for x in range(windowsize_r):
-    for y in range(windowsize_c):
-        imageAfter_DCT[x][y] = dct(arr[x][y])
+medium_quaity_quantized_matrix=[
+    [8, 5, 5, 8, 12, 20, 26, 31],
+    [6, 7, 7, 10, 13, 29, 30, 27],
+    [7, 7, 8, 12, 20, 29, 35, 28],
+    [7, 9, 11, 15, 26, 44, 41, 32],
+    [9, 11, 19, 29, 35, 55, 52, 39],
+    [12, 17, 26, 30, 38, 49, 56, 46],
+    [24, 32, 39, 43, 50, 58, 58, 50],
+    [36, 46, 48, 50, 57, 50, 52, 50]
+]
 
-for x in range(windowsize_r):
-    for y in range(windowsize_c):
-        imageAfter_Quantize[x][y] = quantize(imageAfter_DCT[x][y],quantized_matrix)
+low_quaity_quantized_matrix=[
+    [16, 11, 10, 16, 24, 40, 51, 61],
+    [12, 12, 14, 19, 26, 58, 60, 55],
+    [14, 13, 16, 24, 40, 57, 69, 56],
+    [14, 17, 22, 29, 51, 87, 80, 62],
+    [18, 22, 37, 56, 68, 109, 103, 77],
+    [24, 35, 55, 64, 81, 104, 113, 92],
+    [49, 64, 78, 87, 103, 121, 120, 101],
+    [72, 92, 95, 98, 112, 100, 103, 99]
+]
 
-for x in range(windowsize_r):
-    for y in range(windowsize_c):
-        imageAfter_Coding[str(x)+"_"+str(y)] = run_length_coding(imageAfter_Quantize[x][y])
+quantization_matrix_for_given_bitrate=[
+    [1, 1, 1, 1, 2, 1, 1, 2],
+    [1, 1, 1, 1, 1, 1, 1, 2],
+    [1, 1, 1, 1, 1, 1, 1, 2],
+    [1, 1, 1, 1, 1, 1, 1, 2],
+    [1, 1, 1, 1, 1, 1, 1, 2],
+    [1, 1, 1, 1, 1, 1, 2, 2],
+    [2, 2, 2, 2, 2, 2, 2, 2],
+    [2, 2, 2, 2, 2, 2, 2, 2]
+]
 
-save_dict_to_txt(imageAfter_Coding,"encode.txt")
+quantization_matrix_for_auto = [
+    [2, 6, 9, 8, 12, 20, 26, 31],
+    [6, 7, 9, 10, 13, 29, 30, 27],
+    [9, 7, 8, 12, 20, 29, 35, 28],
+    [7, 9, 11, 15, 26, 44, 41, 32],
+    [9, 11, 19, 29, 35, 55, 52, 39],
+    [12, 17, 26, 30, 38, 49, 56, 46],
+    [24, 32, 39, 43, 50, 58, 58, 50],
+    [36, 46, 48, 50, 57, 50, 52, 50]
+]
 
-print(arr[0][0])
-print(dct(arr[0][0]))
-print(idct(dct(arr[0][0])).real)
+def img_comp(image,im_size,marcoBlockSize,quantized_matrix,total_bits):
+    if image is not None:
+        
+        marcoBlockSize=8
 
-cv2.imshow('origional IMAGE (E/18/023)',arr[4][4])
-cv2.waitKey(0) 
-cv2.destroyAllWindows()
+        # Encoding and saving ==========================================================
+        for i in range(math.ceil(im_size/marcoBlockSize)):
+            for j in range(math.ceil(im_size/marcoBlockSize)):
+                new_img=image[i*marcoBlockSize:i*marcoBlockSize+marcoBlockSize,j*marcoBlockSize:j*marcoBlockSize+marcoBlockSize]
+                mBlock[str(i)+"_"+str(j)]=new_img.tolist()
+                dct_transformed = dct2(new_img)
+                after_dct[str(i)+"_"+str(j)]=dct_transformed.tolist()
+                result_array = np.round(dct_transformed / quantized_matrix).astype(int)
+                after_quantize[str(i)+"_"+str(j)]=result_array
+                run_length_dict[str(i)+"_"+str(j)]=run_length_coding(result_array)
+                total_bits=count_bits(run_length_dict[str(i)+"_"+str(j)],total_bits)
 
-cv2.imshow('origional IMAGE (E/18/023)',(idct(dct(arr[4][4]))).astype(np.uint8))
-cv2.waitKey(0) 
-cv2.destroyAllWindows()
+        # save_dict_to_txt(run_length_dict,"encode.txt")
+        # print("marco_block",mBlock["0_0"])
+        # print("dct",after_dct["0_0"])
+        # print("decoded_quantised_result",after_quantize["0_0"])
+        # # print(run_length_dict["0_0"])
+        
+
+        # Decoding ====================================================================
+        decode_run_length_dict = read_and_decode_text_file("encode.txt")
+
+        for key in decode_run_length_dict:
+            decoded_matrix=decode_run_length_dict[key]
+            result_array_1 = (np.array(decoded_matrix) * np.array(quantized_matrix))
+            after_dequantize[key]=result_array_1
+            after_iDCT[key]= np.round(iDCT2(after_dequantize[key])).astype(int)
+        
+
+        empty_image = np.zeros((im_size, im_size), dtype=np.uint8)
+        # print("length of ", str(len(after_iDCT)))
+        for key in after_iDCT:
+            row=int(key.split("_")[0])*8
+            colomn=int(key.split("_")[1])*8
+            empty_image[row:row+8,colomn:colomn+8]=after_iDCT[key]
+
+        cv2.imshow("Image", empty_image)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        
+        print("psnr value ",psnr(image, empty_image))
+        return total_bits
+    
+        # saveToText("after",empty_image)
+
+        # print("dequantised_result",after_dequantize["0_0"])
+        # print("inverse_dct",after_iDCT["0_0"])
+        # # # Wait for a key press and then close the window
+
+        
+    else:
+        print(f"Error: Unable to load the image from {image_path}")
+
+
+t=img_comp(image,im_size,8,quantization_matrix_for_given_bitrate,total_bits)
+print(t)
+
+# # Call the function
+# result_quantization_matrix, result_total_bits = adjust_quantization_matrix(
+#     337736, image, im_size, 8, quantization_matrix_for_auto, total_bits
+# )
+
+# print("Adjusted Quantization Matrix:")
+# print(result_quantization_matrix)
+# print("Total Bits after Adjustment:", result_total_bits)
+given_value = 300000
+
+# Loop until the condition is satisfied
+while not (given_value - 1000 <= t <= given_value + 1000):
+    if t < given_value:
+        quantization_matrix_for_auto = [[element - 1 for element in row] for row in quantization_matrix_for_auto]
+
+        print(quantization_matrix_for_auto)
+        total_bits=0
+        t=img_comp(image,im_size,8,quantization_matrix_for_auto,0)
+    else:
+        quantization_matrix_for_auto = [[element + 1 for element in row] for row in quantization_matrix_for_auto]
+
+        print(quantization_matrix_for_auto)
+        total_bits=0
+        t=img_comp(image,im_size,8,quantization_matrix_for_auto,0)
+
+    print(t)
+
+# quantization_matrix_for_auto=np.multiply(quantization_matrix_for_auto, 2)
+# Print the final quantization matrix value
+print(quantization_matrix_for_auto)
